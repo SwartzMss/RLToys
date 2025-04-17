@@ -5,7 +5,6 @@
 class QLabel;
 class QPushButton;
 class QComboBox;
-class QTimer;
 
 class GameWindow : public QWidget {
 	Q_OBJECT
@@ -17,9 +16,6 @@ public:
 protected:
 	void paintEvent(QPaintEvent* event) override;
 	void mousePressEvent(QMouseEvent* event) override;
-
-private slots:
-	void checkAndMakeMove();
 
 private:
 	GameBoard* board;
@@ -37,11 +33,9 @@ private:
 	QComboBox* whiteMode = nullptr;
 	QPushButton* startBtn = nullptr;
 	QPushButton* endBtn = nullptr;
-	QTimer* moveTimer = nullptr;
 
 	void checkWin();
 	void updateStatusLabel();
 	void updateCurrentPlayerLabel();
 	void updateGameControls();
-	void makeRandomMove();
 };

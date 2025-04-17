@@ -36,17 +36,12 @@ GameWindow::GameWindow(GameBoard* board, QWidget* parent)
 	currentPlayerLabel->setStyleSheet("font-weight: bold;");
 
 	blackMode = new QComboBox(this);
-	blackMode->addItems({ "Manual", "Random", "AI" });
+	blackMode->addItems({ "Manual", "AI" });  // 移除Random选项
 	blackMode->setGeometry(20, 550, 120, 25);
 
 	whiteMode = new QComboBox(this);
-	whiteMode->addItems({ "Manual", "Random", "AI" });
+	whiteMode->addItems({ "Manual", "AI" });  // 移除Random选项
 	whiteMode->setGeometry(160, 550, 120, 25);
-
-	// 创建定时器
-	moveTimer = new QTimer(this);
-	moveTimer->setInterval(100);  // 100ms 检查一次
-	connect(moveTimer, &QTimer::timeout, this, &GameWindow::checkAndMakeMove);
 
 	connect(startBtn, &QPushButton::clicked, this, [=]() {
 		gameStarted = true;
@@ -55,77 +50,15 @@ GameWindow::GameWindow(GameBoard* board, QWidget* parent)
 		currentPlayer = 1;
 		updateCurrentPlayerLabel();
 		update();
-		moveTimer->start();  // 开始定时器
 	});
 
 	connect(endBtn, &QPushButton::clicked, this, [=]() {
 		gameStarted = false;
 		updateGameControls();
 		currentPlayerLabel->setText("Current Player: -");
-		// 等待一小段时间，确保所有待处理的 AI 落子都被处理
-		QTimer::singleShot(1000, this, [=]() {
-			moveTimer->stop();  // 延迟停止定时器
-		});
 	});
 }
 
-void GameWindow::makeRandomMove() {
-	if (!gameStarted || board->getWinner() != 0) {
-		return;
-	}
-
-	std::vector<std::pair<int, int>> empty;
-	for (int y = 0; y < BOARD_SIZE; ++y)
-		for (int x = 0; x < BOARD_SIZE; ++x)
-			if (board->get(x, y) == 0)
-				empty.emplace_back(x, y);
-
-	if (!empty.empty()) {
-		auto [x, y] = empty[rand() % empty.size()];
-		if (board->place(x, y, currentPlayer)) {
-			checkWin();
-			currentPlayer = 3 - currentPlayer;
-			updateCurrentPlayerLabel();
-			update();
-			
-			// 检查下一个玩家是否是AI模式
-			int nextMode = (currentPlayer == 1 ? blackMode->currentIndex() : whiteMode->currentIndex());
-			if (nextMode == 2) {  // 如果是AI模式
-				moveTimer->stop();  // 停止定时器，等待AI落子
-			}
-		}
-	}
-}
-
-void GameWindow::checkAndMakeMove() {
-	if (!gameStarted || board->getWinner() != 0) {
-		return;
-	}
-
-	int mode = (currentPlayer == 1 ? blackMode->currentIndex() : whiteMode->currentIndex());
-	
-	// 如果是手动模式，直接返回
-	if (mode == 0) {
-		return;
-	}
-
-	// 如果是 AI 模式
-	if (mode == 2) {
-		int opponentMode = (currentPlayer == 1 ? whiteMode->currentIndex() : blackMode->currentIndex());
-		if (opponentMode == 0) {
-			// 对手是手动模式，停止定时器，等待手动落子
-			moveTimer->stop();
-			return;
-		}
-		moveTimer->stop();  // 停止定时器，等待AI落子
-		return;
-	}
-
-	// 执行随机模式落子
-	if (mode == 1) {
-		makeRandomMove();
-	}
-}
 
 void GameWindow::paintEvent(QPaintEvent*) {
 	QPainter painter(this);
@@ -155,10 +88,10 @@ void GameWindow::mousePressEvent(QMouseEvent* event)
 		return;
 	}
 
-	// 2. 获取当前玩家模式（假设 0=手动, 1=网络, 2=AI）
+	// 2. 获取当前玩家模式（0=手动, 1=AI）
 	int currentMode = (currentPlayer == 1) ? blackMode->currentIndex() : whiteMode->currentIndex();
-	// 若当前是 AI 或网络模式，则用户点击无效，直接返回
-	if (currentMode != 0) {
+	// 若当前是 AI 模式，则用户点击无效，直接返回
+	if (currentMode == 1) {
 		return;
 	}
 
@@ -180,12 +113,6 @@ void GameWindow::mousePressEvent(QMouseEvent* event)
 		currentPlayer = 3 - currentPlayer;
 		updateCurrentPlayerLabel();  // 更新当前玩家标签
 		update();
-
-		// 5. 如果切换后轮到的玩家是 AI，就启动定时器让 AI 下子
-		int opponentMode = (currentPlayer == 1) ? blackMode->currentIndex() : whiteMode->currentIndex();
-		if (opponentMode == 2) {
-			moveTimer->start();
-		}
 	}
 }
 
@@ -196,20 +123,9 @@ bool GameWindow::makeMove(int x, int y, int color)
 	if (!success)
 		return false;
 
-	// 2. 如果成功，做后续流程
-	//    - 检查胜负 (若你想先判断是谁下，把 color 传进去做五连判断)
-	//    - 切换当前玩家 
-	//    - 更新UI 
-	//    - 如果下一个玩家是AI，就启动定时器
-	checkWin(); // 需要的话
+	checkWin();
 
 	currentPlayer = 3 - currentPlayer; //1->2,2->1
-
-	// 判断对手模式
-	int nextMode = (currentPlayer == 1) ? blackMode->currentIndex() : whiteMode->currentIndex();
-	if (nextMode == 2) {
-		moveTimer->start();
-	}
 
 	update();
 	return true;
