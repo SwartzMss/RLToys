@@ -84,7 +84,8 @@ void HttpServer::handleRequest(QTcpSocket* socket) {
 	else if (request.startsWith("GET /can_move")) {
 		QJsonObject res;
 		res["can_move"] = board->getWinner() == 0;
-		res["current_player"] = window->getCurrentPlayer();  // 👈 你需要新增个 getter 方法
+		res["current_player"] = window->getCurrentPlayer();
+		res["winner"] = board->getWinner();
 		QJsonDocument doc(res);
 		QByteArray body = doc.toJson();
 

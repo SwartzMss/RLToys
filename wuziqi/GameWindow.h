@@ -1,7 +1,5 @@
 #pragma once
 #include <QWidget>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
 #include "GameBoard.h"
 
 class QLabel;
@@ -22,7 +20,6 @@ protected:
 
 private slots:
 	void checkAndMakeMove();
-	void onAiMoveResponse(QNetworkReply* reply);
 
 private:
 	GameBoard* board;
@@ -32,17 +29,19 @@ private:
 
 	int blackWinCount = 0;
 	int whiteWinCount = 0;
+	int drawCount = 0;
 
 	QLabel* statusLabel = nullptr;
+	QLabel* currentPlayerLabel = nullptr;
 	QComboBox* blackMode = nullptr;
 	QComboBox* whiteMode = nullptr;
 	QPushButton* startBtn = nullptr;
 	QPushButton* endBtn = nullptr;
 	QTimer* moveTimer = nullptr;
-	QNetworkAccessManager* networkManager = nullptr;
 
 	void checkWin();
 	void updateStatusLabel();
+	void updateCurrentPlayerLabel();
 	void updateGameControls();
-	void requestAiMove();
+	void makeRandomMove();
 };

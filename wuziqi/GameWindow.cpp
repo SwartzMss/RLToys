@@ -15,42 +15,45 @@
 
 GameWindow::GameWindow(GameBoard* board, QWidget* parent)
 	: QWidget(parent), board(board) {
-	setFixedSize(640, 760);
+	setFixedSize(400, 600);  // 减小窗口高度
 	std::srand(std::time(nullptr));
 
 	startBtn = new QPushButton("Start Game", this);
-	startBtn->setGeometry(20, 640, 120, 30);
+	startBtn->setGeometry(20, 480, 120, 30);
 
 	endBtn = new QPushButton("End Game", this);
-	endBtn->setGeometry(160, 640, 120, 30);
+	endBtn->setGeometry(160, 480, 120, 30);
 	endBtn->setEnabled(false);
 
 	statusLabel = new QLabel(this);
-	statusLabel->setGeometry(20, 680, 300, 60);
+	statusLabel->setGeometry(20, 420, 300, 50);  // 上移状态标签
 	updateStatusLabel();
+
+	// 添加当前玩家标签
+	currentPlayerLabel = new QLabel(this);
+	currentPlayerLabel->setGeometry(20, 380, 300, 30);
+	currentPlayerLabel->setText("Current Player: -");
+	currentPlayerLabel->setStyleSheet("font-weight: bold;");
 
 	blackMode = new QComboBox(this);
 	blackMode->addItems({ "Manual", "Random", "AI" });
-	blackMode->setGeometry(20, 710, 120, 25);
+	blackMode->setGeometry(20, 550, 120, 25);
 
 	whiteMode = new QComboBox(this);
 	whiteMode->addItems({ "Manual", "Random", "AI" });
-	whiteMode->setGeometry(160, 710, 120, 25);
+	whiteMode->setGeometry(160, 550, 120, 25);
 
 	// 创建定时器
 	moveTimer = new QTimer(this);
-	moveTimer->setInterval(500);  // 500ms 检查一次
+	moveTimer->setInterval(100);  // 100ms 检查一次
 	connect(moveTimer, &QTimer::timeout, this, &GameWindow::checkAndMakeMove);
-
-	// 创建网络管理器
-	networkManager = new QNetworkAccessManager(this);
-	connect(networkManager, &QNetworkAccessManager::finished, this, &GameWindow::onAiMoveResponse);
 
 	connect(startBtn, &QPushButton::clicked, this, [=]() {
 		gameStarted = true;
 		updateGameControls();
 		board->reset();
 		currentPlayer = 1;
+		updateCurrentPlayerLabel();
 		update();
 		moveTimer->start();  // 开始定时器
 	});
@@ -58,6 +61,7 @@ GameWindow::GameWindow(GameBoard* board, QWidget* parent)
 	connect(endBtn, &QPushButton::clicked, this, [=]() {
 		gameStarted = false;
 		updateGameControls();
+		currentPlayerLabel->setText("Current Player: -");
 		// 等待一小段时间，确保所有待处理的 AI 落子都被处理
 		QTimer::singleShot(1000, this, [=]() {
 			moveTimer->stop();  // 延迟停止定时器
@@ -65,67 +69,30 @@ GameWindow::GameWindow(GameBoard* board, QWidget* parent)
 	});
 }
 
-void GameWindow::requestAiMove() {
-	// 获取当前棋盘状态
-	QJsonArray boardData;
-	for (int y = 0; y < 15; ++y) {
-		QJsonArray row;
-		for (int x = 0; x < 15; ++x) {
-			row.append(board->get(x, y));
-		}
-		boardData.append(row);
-	}
-
-	QJsonObject requestData;
-	requestData["board"] = boardData;
-	requestData["current_player"] = currentPlayer;
-
-	QNetworkRequest request(QUrl("http://localhost:8080/move"));
-	request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-	QJsonDocument doc(requestData);
-	networkManager->post(request, doc.toJson());
-}
-
-void GameWindow::onAiMoveResponse(QNetworkReply* reply) {
-	if (reply->error() != QNetworkReply::NoError) {
-		qDebug() << "Error:" << reply->errorString();
-		reply->deleteLater();
+void GameWindow::makeRandomMove() {
+	if (!gameStarted || board->getWinner() != 0) {
 		return;
 	}
 
-	QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-	QJsonObject response = doc.object();
+	std::vector<std::pair<int, int>> empty;
+	for (int y = 0; y < BOARD_SIZE; ++y)
+		for (int x = 0; x < BOARD_SIZE; ++x)
+			if (board->get(x, y) == 0)
+				empty.emplace_back(x, y);
 
-	if (response["success"].toBool()) {
-		int x = response["x"].toInt();
-		int y = response["y"].toInt();
+	if (!empty.empty()) {
+		auto [x, y] = empty[rand() % empty.size()];
 		if (board->place(x, y, currentPlayer)) {
 			checkWin();
 			currentPlayer = 3 - currentPlayer;
+			updateCurrentPlayerLabel();
 			update();
-		}
-	}
-
-	reply->deleteLater();
-}
-
-void GameWindow::paintEvent(QPaintEvent*) {
-	QPainter painter(this);
-	for (int i = 0; i < 15; ++i) {
-		painter.drawLine(gridSize / 2, gridSize / 2 + i * gridSize,
-			gridSize / 2 + 14 * gridSize, gridSize / 2 + i * gridSize);
-		painter.drawLine(gridSize / 2 + i * gridSize, gridSize / 2,
-			gridSize / 2 + i * gridSize, gridSize / 2 + 14 * gridSize);
-	}
-
-	for (int y = 0; y < 15; ++y) {
-		for (int x = 0; x < 15; ++x) {
-			int piece = board->get(x, y);
-			if (piece == 0) continue;
-			QPoint center(gridSize / 2 + x * gridSize, gridSize / 2 + y * gridSize);
-			painter.setBrush(piece == 1 ? Qt::black : Qt::white);
-			painter.drawEllipse(center, gridSize / 2 - 4, gridSize / 2 - 4);
+			
+			// 检查下一个玩家是否是AI模式
+			int nextMode = (currentPlayer == 1 ? blackMode->currentIndex() : whiteMode->currentIndex());
+			if (nextMode == 2) {  // 如果是AI模式
+				moveTimer->stop();  // 停止定时器，等待AI落子
+			}
 		}
 	}
 }
@@ -142,7 +109,7 @@ void GameWindow::checkAndMakeMove() {
 		return;
 	}
 
-	// 如果是 AI 模式，检查对手是否是手动模式
+	// 如果是 AI 模式
 	if (mode == 2) {
 		int opponentMode = (currentPlayer == 1 ? whiteMode->currentIndex() : blackMode->currentIndex());
 		if (opponentMode == 0) {
@@ -150,27 +117,33 @@ void GameWindow::checkAndMakeMove() {
 			moveTimer->stop();
 			return;
 		}
+		moveTimer->stop();  // 停止定时器，等待AI落子
+		return;
 	}
 
-	// 执行落子
-	if (mode == 1) {  // Random 模式
-		std::vector<std::pair<int, int>> empty;
-		for (int y = 0; y < 15; ++y)
-			for (int x = 0; x < 15; ++x)
-				if (board->get(x, y) == 0)
-					empty.emplace_back(x, y);
+	// 执行随机模式落子
+	if (mode == 1) {
+		makeRandomMove();
+	}
+}
 
-		if (!empty.empty()) {
-			auto [x, y] = empty[rand() % empty.size()];
-			if (board->place(x, y, currentPlayer)) {
-				checkWin();
-				currentPlayer = 3 - currentPlayer;
-				update();
-			}
+void GameWindow::paintEvent(QPaintEvent*) {
+	QPainter painter(this);
+	for (int i = 0; i < BOARD_SIZE; ++i) {
+		painter.drawLine(gridSize / 2, gridSize / 2 + i * gridSize,
+			gridSize / 2 + (BOARD_SIZE - 1) * gridSize, gridSize / 2 + i * gridSize);
+		painter.drawLine(gridSize / 2 + i * gridSize, gridSize / 2,
+			gridSize / 2 + i * gridSize, gridSize / 2 + (BOARD_SIZE - 1) * gridSize);
+	}
+
+	for (int y = 0; y < BOARD_SIZE; ++y) {
+		for (int x = 0; x < BOARD_SIZE; ++x) {
+			int piece = board->get(x, y);
+			if (piece == 0) continue;
+			QPoint center(gridSize / 2 + x * gridSize, gridSize / 2 + y * gridSize);
+			painter.setBrush(piece == 1 ? Qt::black : Qt::white);
+			painter.drawEllipse(center, gridSize / 2 - 4, gridSize / 2 - 4);
 		}
-	}
-	else if (mode == 2) {  // AI 模式
-		requestAiMove();  // 请求 AI 落子
 	}
 }
 
@@ -194,7 +167,7 @@ void GameWindow::mousePressEvent(QMouseEvent* event)
 	int y = event->pos().y() / gridSize;
 
 	// 若坐标不在合法范围内，直接返回
-	if (x < 0 || x >= 15 || y < 0 || y >= 15) {
+	if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) {
 		return;
 	}
 
@@ -205,6 +178,7 @@ void GameWindow::mousePressEvent(QMouseEvent* event)
 
 		// 切换玩家
 		currentPlayer = 3 - currentPlayer;
+		updateCurrentPlayerLabel();  // 更新当前玩家标签
 		update();
 
 		// 5. 如果切换后轮到的玩家是 AI，就启动定时器让 AI 下子
@@ -247,23 +221,32 @@ void GameWindow::checkWin() {
 		if (w == 1) ++blackWinCount;
 		if (w == 2) ++whiteWinCount;
 		updateStatusLabel();
+	} else if (w == 3) {
+		++drawCount;  // 增加平局计数
+		updateStatusLabel();
 	}
 }
 
 void GameWindow::updateStatusLabel() {
-	QString text = QString("Black Wins: %1\nWhite Wins: %2")
+	QString text = QString("Black Wins: %1\nWhite Wins: %2\nDraws: %3")
 		.arg(blackWinCount)
-		.arg(whiteWinCount);
+		.arg(whiteWinCount)
+		.arg(drawCount);
+
 
 	if (statusLabel) {
-		// 1) 确保是 PlainText（如果之前没有设置过也可以不用写）
 		statusLabel->setTextFormat(Qt::PlainText);
-		// 2) 若需要自动换行，可开启
 		statusLabel->setWordWrap(true);
-		// 3) 设置文本
 		statusLabel->setText(text);
-		// 4) 让它根据内容自动调大小（可选）
 		statusLabel->adjustSize();
+	}
+}
+
+void GameWindow::updateCurrentPlayerLabel() {
+	if (gameStarted) {
+		QString player = currentPlayer == 1 ? "Black" : "White";
+		currentPlayerLabel->setText(QString("Current Player: %1").arg(player));
+		currentPlayerLabel->update();  // 添加这行，强制立即更新标签
 	}
 }
 
